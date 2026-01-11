@@ -1,0 +1,88 @@
+stages:
+  - build
+  - staging
+  - production
+
+image: node:22-slim
+
+variables:
+  project_name: "[project-name-here]"
+  publish_path: "dist"
+
+build:
+  stage: build
+  tags:
+    - satelites
+
+  before_script:
+    - corepack enable
+    - echo "//pkgs.dev.azure.com/H-Engenharia-TIC/_packaging/herval-npm/npm/registry/:_authToken=${AZURE_NPM_TOKEN}" >> ~/.npmrc
+    - echo "@herval:registry=https://pkgs.dev.azure.com/H-Engenharia-TIC/_packaging/herval-npm/npm/registry/" >> ~/.npmrc
+    - echo "always-auth=true" >> ~/.npmrc
+
+  script:
+    - pnpm install
+    - pnpm run build
+
+staging:
+  stage: staging
+  tags:
+    - satelites
+
+  variables:
+    remote_path: ""
+    publish_path: "dist"
+
+  before_script:
+    - "apt-get update -qq && apt-get install -y -qq lftp"
+    - corepack enable
+    - echo "//pkgs.dev.azure.com/H-Engenharia-TIC/_packaging/herval-npm/npm/registry/:_authToken=${AZURE_NPM_TOKEN}" >> ~/.npmrc
+    - echo "@herval:registry=https://pkgs.dev.azure.com/H-Engenharia-TIC/_packaging/herval-npm/npm/registry/" >> ~/.npmrc
+    - echo "always-auth=true" >> ~/.npmrc
+
+  script:
+    - pnpm install
+    - pnpm run build:staging
+    - lftp -u $FTP_USERNAME,$FTP_PASSWORD $FTP_HOST_BLACK115 -e "mirror --delete -R -p $publish_path $remote_path; quit"
+
+  only:
+    refs:
+      - staging
+    changes:
+      - src/**/*
+
+  environment:
+    name: staging
+    url: https://hml-xpto.herval.com.br
+
+production:
+  stage: production
+  tags:
+    - satelites
+
+  variables:
+    remote_path: ""
+
+  before_script:
+    - "apt-get update -qq && apt-get install -y -qq lftp"
+    - corepack enable
+    - echo "//pkgs.dev.azure.com/H-Engenharia-TIC/_packaging/herval-npm/npm/registry/:_authToken=${AZURE_NPM_TOKEN}" >> ~/.npmrc
+    - echo "@herval:registry=https://pkgs.dev.azure.com/H-Engenharia-TIC/_packaging/herval-npm/npm/registry/" >> ~/.npmrc
+    - echo "always-auth=true" >> ~/.npmrc
+
+  script:
+    - pnpm install
+    - pnpm run build:production
+    # - lftp -u $FTP_USERNAME,$FTP_PASSWORD $FTP_HOST_BLACK0117 -e "mirror --delete -R -p $publish_path $remote_path; quit"
+    # - lftp -u $FTP_USERNAME,$FTP_PASSWORD $FTP_HOST_BLACK0118 -e "mirror --delete -R -p $publish_path $remote_path; quit"
+
+  when: manual
+  only:
+    refs:
+      - master
+    changes:
+      - src/**/*
+
+  environment:
+    name: production
+    url: https://xpto.herval.com.br
